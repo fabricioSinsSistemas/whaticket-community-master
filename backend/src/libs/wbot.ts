@@ -46,15 +46,28 @@ export const initWbot = async (whatsapp: Whatsapp): Promise<Session> => {
       const args: String = process.env.CHROME_ARGS || "";
 
       const wbot: Session = new Client({
-        session: sessionCfg,
-        authStrategy: new LocalAuth({ clientId: "bd_" + whatsapp.id }),
-        puppeteer: {
-          executablePath: process.env.CHROME_BIN || undefined,
-          // @ts-ignore
-          browserWSEndpoint: process.env.CHROME_WS || undefined,
-          args: args.split(" ")
-        }
-      });
+  session: sessionCfg,
+  authStrategy: new LocalAuth({ clientId: "bd_" + whatsapp.id }),
+  puppeteer: {
+    // NOVO: Caminho do Chromium para Nixpacks
+    executablePath: process.env.CHROME_BIN || 
+                   process.env.CHROMIUM_PATH || 
+                   "/nix/var/nix/profiles/default/bin/chromium" || 
+                   undefined,
+    // @ts-ignore
+    browserWSEndpoint: process.env.CHROME_WS || undefined,
+    // NOVO: Argumentos corrigidos para Nixpacks
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-accelerated-2d-canvas',
+      '--disable-gpu',
+      '--single-process',
+      ...(args ? args.split(" ") : []) // Mantém args existentes se houver
+    ]
+  }
+});
 
       wbot.initialize();
 
