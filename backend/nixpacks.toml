@@ -1,34 +1,5 @@
 [phases.setup]
-nixPkgs = [
-  "nodejs-18_x",
-  "chromium",
-  "glib",
-  "nss",
-  "atk",
-  "at-spi2-atk",
-  "cups",
-  "dbus",
-  "expat",
-  "fontconfig",
-  "freetype",
-  "gdk-pixbuf",
-  "gtk3",                    # MUDADO: "gtk3" em vez de "gtk+3"
-  "libX11",
-  "libxcb",
-  "libXcomposite",
-  "libXcursor",
-  "libXdamage",
-  "libXext",
-  "libXfixes",
-  "libXi",
-  "libXrandr",
-  "libXrender",
-  "libXScrnSaver",
-  "libXtst",
-  "pango",
-  "alsa-lib",
-  "nspr"
-]
+nixPkgs = ["nodejs-18_x", "chromium"]
 
 [phases.install]
 cmds = ["npm ci --omit=dev"]
@@ -38,8 +9,3 @@ cmds = ["npm run build"]
 
 [start]
 cmd = "node dist/server.js"
-
-[variables]
-PUPPETEER_SKIP_CHROMIUM_DOWNLOAD = "true"
-CHROMIUM_PATH = "/nix/var/nix/profiles/default/bin/chromium"
-NODE_ENV = "production"
