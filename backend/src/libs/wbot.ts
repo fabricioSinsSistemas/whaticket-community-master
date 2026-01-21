@@ -13,35 +13,68 @@ interface Session extends Client {
 const sessions: Session[] = [];
 
 const syncUnreadMessages = async (wbot: Session) => {
-  const chats = await wbot.getChats();
+  let chats: any[] = [];
+
+  try {
+    chats = await wbot.getChats();
+  } catch (err: any) {
+    logger.warn(
+      `Could not fetch chats to sync unread messages. Err: ${err?.message ?? err}`
+    );
+    return;
+  }
 
   /* eslint-disable no-restricted-syntax */
   /* eslint-disable no-await-in-loop */
 
   for (const chat of chats) {
-    if (chat.unreadCount > 0) {
-      const unreadMessages = await chat.fetchMessages({
-        limit: chat.unreadCount
-      });
+    try {
+      if (!chat) continue;
+
+      const unreadCount = Number(chat.unreadCount ?? 0);
+      if (!unreadCount || unreadCount <= 0) continue;
+
+      let unreadMessages: any[] = [];
+      try {
+        unreadMessages = await chat.fetchMessages({ limit: unreadCount });
+      } catch (errFetch: any) {
+        logger.warn(
+          `Could not fetch unread messages for chat. Err: ${errFetch?.message ?? errFetch}`
+        );
+        continue;
+      }
 
       for (const msg of unreadMessages) {
-        await handleMessage(msg, wbot);
+        try {
+          await handleMessage(msg, wbot);
+        } catch (errHandle: any) {
+          logger.warn(
+            `Error handling unread message (ignored). Err: ${errHandle?.message ?? errHandle}`
+          );
+        }
       }
 
-      // WhatsApp Web muda com frequência e pode quebrar o sendSeen (marcar como lido).
-      // Não deixe isso derrubar o backend.
-      try {
-        await chat.sendSeen();
-      } catch (err: any) {
-        logger.warn(
-          `Could not mark messages as read. Maybe whatsapp session disconnected? Err: ${
-            err?.message ?? err
-          }`
-        );
+      // só chama se existir e estiver conectado o suficiente
+      if (typeof chat.sendSeen === "function") {
+        try {
+          await chat.sendSeen();
+        } catch (errSeen: any) {
+          logger.warn(
+            `Could not mark messages as read. Maybe whatsapp session disconnected? Err: ${errSeen?.message ?? errSeen}`
+          );
+        }
+      } else {
+        // evita o erro "reading 'sendSeen'"
+        logger.warn("chat.sendSeen is not available (ignored).");
       }
+    } catch (errLoop: any) {
+      logger.warn(
+        `syncUnreadMessages loop error (ignored). Err: ${errLoop?.message ?? errLoop}`
+      );
     }
   }
 };
+
 
 export const initWbot = async (whatsapp: Whatsapp): Promise<Session> => {
   return new Promise((resolve, reject) => {
