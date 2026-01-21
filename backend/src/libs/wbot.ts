@@ -17,7 +17,7 @@ const syncUnreadMessages = async (wbot: Session) => {
 
   /* eslint-disable no-restricted-syntax */
   /* eslint-disable no-await-in-loop */
-  for (const chat of chats) {
+ /* for (const chat of chats) {
     if (chat.unreadCount > 0) {
       const unreadMessages = await chat.fetchMessages({
         limit: chat.unreadCount
@@ -30,7 +30,28 @@ const syncUnreadMessages = async (wbot: Session) => {
       await chat.sendSeen();
     }
   }
-};
+};*/
+  for (const chat of chats) {
+  if (chat.unreadCount > 0) {
+    const unreadMessages = await chat.fetchMessages({
+      limit: chat.unreadCount
+    });
+
+    for (const msg of unreadMessages) {
+      await handleMessage(msg, wbot);
+    }
+
+    try {
+      await chat.sendSeen();
+    } catch (err) {
+      console.warn(
+        "[WPP] Falha ao marcar como lido (sendSeen). Ignorando para evitar crash:",
+        err?.message ?? err
+      );
+    }
+  }
+}
+
 
 export const initWbot = async (whatsapp: Whatsapp): Promise<Session> => {
   return new Promise((resolve, reject) => {
