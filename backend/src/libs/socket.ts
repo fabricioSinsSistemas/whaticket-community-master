@@ -10,15 +10,31 @@ let io: SocketIO;
 export const initIO = (httpServer: Server): SocketIO => {
   io = new SocketIO(httpServer, {
     cors: {
-      origin: process.env.FRONTEND_URL
-    }
+      origin: process.env.FRONTEND_URL || "http://tcckg88kco4c08c4kwk4ksss.76.13.70.6.sslip.io",
+      credentials: true,
+      methods: ["GET", "POST"]
+    },
+    // ADICIONE ESTAS CONFIGURAÇÕES:
+    transports: ["websocket", "polling"],  // ← IMPORTANTE
+    allowEIO3: true,  // Para compatibilidade
+    pingTimeout: 60000,
+    pingInterval: 25000,
+    cookie: false
   });
 
   io.on("connection", socket => {
     const { token } = socket.handshake.query;
+    
+    // Permite conexão sem token inicial (para login)
+    if (!token || token === "null") {
+      logger.info("Client connected without token (pre-login)");
+      socket.emit("connection", "connected without auth");
+      return socket;
+    }
+    
     let tokenData = null;
     try {
-      tokenData = verify(token, authConfig.secret);
+      tokenData = verify(token.toString(), authConfig.secret);
       logger.debug(JSON.stringify(tokenData), "io-onConnection: tokenData");
     } catch (error) {
       logger.error(JSON.stringify(error), "Error decoding token");
