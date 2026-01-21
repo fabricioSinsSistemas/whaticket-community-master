@@ -1,46 +1,37 @@
 [phases.setup]
 nixPkgs = [
   "nodejs-18_x",
-  "chromium",           # Chromium principal
-  "glib",              # libglib-2.0
-  "nss",               # libnss3
-  "atk",               # libatk-1.0
-  "at-spi2-atk",       # libatk-bridge-2.0
-  "cups",              # libcups2
-  "dbus",              # libdbus-1
-  "expat",             # libexpat
-  "fontconfig",        # libfontconfig
-  "freetype",          # libfreetype
-  "gdk-pixbuf",        # libgdk_pixbuf-2.0
-  "gtk+3",             # libgtk-3
-  "libX11",            # libX11
-  "libxcb",            # libxcb
-  "libXcomposite",     # libXcomposite
-  "libXcursor",        # libXcursor
-  "libXdamage",        # libXdamage
-  "libXext",           # libXext
-  "libXfixes",         # libXfixes
-  "libXi",             # libXi
-  "libXrandr",         # libXrandr
-  "libXrender",        # libXrender
-  "libXScrnSaver",     # libXss
-  "libXtst",           # libXtst
-  "pango",             # libpango-1.0
-  "alsa-lib",          # libasound
-  "nspr",              # libnspr4
-  "libdrm",            # libdrm
-  "mesa",              # libgbm
-  "libxkbcommon",      # libxkbcommon
-  "libappindicator-gtk3" # Para notificações do sistema
+  "chromium",
+  "glib",
+  "nss",
+  "atk",
+  "at-spi2-atk",
+  "cups",
+  "dbus",
+  "expat",
+  "fontconfig",
+  "freetype",
+  "gdk-pixbuf",
+  "gtk3",                    # MUDADO: "gtk3" em vez de "gtk+3"
+  "libX11",
+  "libxcb",
+  "libXcomposite",
+  "libXcursor",
+  "libXdamage",
+  "libXext",
+  "libXfixes",
+  "libXi",
+  "libXrandr",
+  "libXrender",
+  "libXScrnSaver",
+  "libXtst",
+  "pango",
+  "alsa-lib",
+  "nspr"
 ]
 
 [phases.install]
-cmds = [
-  "npm ci --omit=dev",
-  # Garantir que puppeteer-core seja usado
-  "npm list puppeteer 2>/dev/null && npm uninstall puppeteer || true",
-  "npm install puppeteer-core@^21.0.0"
-]
+cmds = ["npm ci --omit=dev"]
 
 [phases.build]
 cmds = ["npm run build"]
