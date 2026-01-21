@@ -12,6 +12,11 @@ interface Session extends Client {
 
 const sessions: Session[] = [];
 
+/**
+ * Sincroniza mensagens não lidas (processa) sem tentar marcar como lidas.
+ * Motivo: sendSeen/sendRead frequentemente quebra quando o WhatsApp Web muda
+ * (ex.: erro "markedUnread" undefined) e isso gera WARN/instabilidade.
+ */
 const syncUnreadMessages = async (wbot: Session) => {
   let chats: any[] = [];
 
@@ -54,19 +59,9 @@ const syncUnreadMessages = async (wbot: Session) => {
         }
       }
 
-      // só chama se existir e estiver conectado o suficiente
-      if (typeof chat.sendSeen === "function") {
-        try {
-          await chat.sendSeen();
-        } catch (errSeen: any) {
-          logger.warn(
-            `Could not mark messages as read. Maybe whatsapp session disconnected? Err: ${errSeen?.message ?? errSeen}`
-          );
-        }
-      } else {
-        // evita o erro "reading 'sendSeen'"
-        logger.warn("chat.sendSeen is not available (ignored).");
-      }
+      // IMPORTANTE:
+      // Não chamar chat.sendSeen() aqui para evitar o bug do WhatsApp Web
+      // (markedUnread undefined) que causa WARN e pode instabilizar a sessão.
     } catch (errLoop: any) {
       logger.warn(
         `syncUnreadMessages loop error (ignored). Err: ${errLoop?.message ?? errLoop}`
@@ -75,7 +70,6 @@ const syncUnreadMessages = async (wbot: Session) => {
   }
 };
 
-
 export const initWbot = async (whatsapp: Whatsapp): Promise<Session> => {
   return new Promise((resolve, reject) => {
     try {
@@ -83,8 +77,6 @@ export const initWbot = async (whatsapp: Whatsapp): Promise<Session> => {
       const sessionName = whatsapp.name;
       let sessionCfg: any;
 
-      // OBS: em versões atuais do whatsapp-web.js, "session" + LocalAuth não é o caminho ideal.
-      // Mantive para não quebrar seu projeto, mas "LocalAuth" já gerencia persistência.
       if (whatsapp && whatsapp.session) {
         try {
           sessionCfg = JSON.parse(whatsapp.session);
@@ -102,7 +94,6 @@ export const initWbot = async (whatsapp: Whatsapp): Promise<Session> => {
         authStrategy: new LocalAuth({ clientId: "bd_" + whatsapp.id }),
 
         puppeteer: {
-          // Caminho do Chromium para ambientes Nixpacks/Coolify
           executablePath:
             process.env.CHROME_BIN ||
             process.env.CHROMIUM_PATH ||
@@ -117,6 +108,7 @@ export const initWbot = async (whatsapp: Whatsapp): Promise<Session> => {
             "--disable-dev-shm-usage",
             "--disable-accelerated-2d-canvas",
             "--disable-gpu",
+            // dica: se ainda tiver desconexão, teste REMOVER o --single-process
             "--single-process",
             ...(args ? args.split(" ") : [])
           ]
@@ -170,6 +162,11 @@ export const initWbot = async (whatsapp: Whatsapp): Promise<Session> => {
         reject(new Error("Error starting whatsapp session."));
       });
 
+      // Alguns forks/logs usam disconnected, outros usam change_state
+      wbot.on("disconnected", (reason: any) => {
+        logger.info(`Session: ${sessionName} DISCONNECTED. Reason: ${reason}`);
+      });
+
       wbot.on("ready", async () => {
         logger.info(`Session: ${sessionName} READY`);
 
@@ -191,12 +188,10 @@ export const initWbot = async (whatsapp: Whatsapp): Promise<Session> => {
         }
 
         try {
-          // mantém o comportamento atual do seu projeto
-          // (não muda a lógica de presença)
           // @ts-ignore
           wbot.sendPresenceAvailable();
         } catch (e) {
-          // não é crítico
+          // não crítico
         }
 
         await syncUnreadMessages(wbot);
