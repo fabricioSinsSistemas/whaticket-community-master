@@ -1,44 +1,54 @@
 [phases.setup]
 nixPkgs = [
-  "nodejs-18_x", 
-  "chromium",
-  "glibc",
-  "glib",
-  "nss",
-  "atk",
-  "at-spi2-atk",
-  "cups",
-  "dbus",
-  "expat",
-  "gdk-pixbuf",
-  "gtk+3",
-  "pango",
-  "xorg.libX11",
-  "xorg.libxcb",
-  "xorg.libXcomposite",
-  "xorg.libXcursor",
-  "xorg.libXdamage",
-  "xorg.libXext",
-  "xorg.libXfixes",
-  "xorg.libXi",
-  "xorg.libXrandr",
-  "xorg.libXrender",
-  "xorg.libXScrnSaver",
-  "xorg.libXtst",
-  "alsa-lib",
-  "nss",
-  "nspr"
+  "nodejs-18_x",
+  "chromium",           # Chromium principal
+  "glib",              # libglib-2.0
+  "nss",               # libnss3
+  "atk",               # libatk-1.0
+  "at-spi2-atk",       # libatk-bridge-2.0
+  "cups",              # libcups2
+  "dbus",              # libdbus-1
+  "expat",             # libexpat
+  "fontconfig",        # libfontconfig
+  "freetype",          # libfreetype
+  "gdk-pixbuf",        # libgdk_pixbuf-2.0
+  "gtk+3",             # libgtk-3
+  "libX11",            # libX11
+  "libxcb",            # libxcb
+  "libXcomposite",     # libXcomposite
+  "libXcursor",        # libXcursor
+  "libXdamage",        # libXdamage
+  "libXext",           # libXext
+  "libXfixes",         # libXfixes
+  "libXi",             # libXi
+  "libXrandr",         # libXrandr
+  "libXrender",        # libXrender
+  "libXScrnSaver",     # libXss
+  "libXtst",           # libXtst
+  "pango",             # libpango-1.0
+  "alsa-lib",          # libasound
+  "nspr",              # libnspr4
+  "libdrm",            # libdrm
+  "mesa",              # libgbm
+  "libxkbcommon",      # libxkbcommon
+  "libappindicator-gtk3" # Para notificações do sistema
 ]
 
 [phases.install]
-cmds = ["npm ci"]
+cmds = [
+  "npm ci --omit=dev",
+  # Garantir que puppeteer-core seja usado
+  "npm list puppeteer 2>/dev/null && npm uninstall puppeteer || true",
+  "npm install puppeteer-core@^21.0.0"
+]
 
 [phases.build]
 cmds = ["npm run build"]
 
 [start]
-cmd = "npm start"
+cmd = "node dist/server.js"
 
-[environment]
+[variables]
 PUPPETEER_SKIP_CHROMIUM_DOWNLOAD = "true"
-PUPPETEER_EXECUTABLE_PATH = "/nix/var/nix/profiles/default/bin/chromium"
+CHROMIUM_PATH = "/nix/var/nix/profiles/default/bin/chromium"
+NODE_ENV = "production"
