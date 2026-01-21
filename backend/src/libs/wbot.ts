@@ -13,69 +13,33 @@ interface Session extends Client {
 const sessions: Session[] = [];
 
 const syncUnreadMessages = async (wbot: Session) => {
-  try {
-    console.log('[WPP] Sincronizando mensagens não lidas...');
-    
-    const chats = await wbot.getChats();
-    console.log(`[WPP] Total de chats: ${chats.length}`);
+  const chats = await wbot.getChats();
 
-    let processed = 0;
-    let errors = 0;
+  /* eslint-disable no-restricted-syntax */
+  /* eslint-disable no-await-in-loop */
 
-    for (const chat of chats) {
+  for (const chat of chats) {
+    if (chat.unreadCount > 0) {
+      const unreadMessages = await chat.fetchMessages({
+        limit: chat.unreadCount
+      });
+
+      for (const msg of unreadMessages) {
+        await handleMessage(msg, wbot);
+      }
+
+      // WhatsApp Web muda com frequência e pode quebrar o sendSeen (marcar como lido).
+      // Não deixe isso derrubar o backend.
       try {
-        // Verificar se chat é válido
-        if (!chat || !chat.id) {
-          console.warn('[WPP] Chat inválido encontrado, pulando...');
-          continue;
-        }
-
-        // Verificar unreadCount de forma segura
-        const unreadCount = chat.unreadCount || 0;
-        
-        if (unreadCount > 0) {
-          console.log(`[WPP] Chat ${chat.id.user} tem ${unreadCount} mensagens não lidas`);
-          
-          try {
-            const unreadMessages = await chat.fetchMessages({
-              limit: Math.min(unreadCount, 50) // Limitar para não sobrecarregar
-            });
-
-            for (const msg of unreadMessages) {
-              try {
-                await handleMessage(msg, wbot);
-              } catch (msgError) {
-                console.warn(`[WPP] Erro ao processar mensagem no chat ${chat.id.user}:`, msgError.message);
-              }
-            }
-
-            // Tentar marcar como visto (com timeout)
-            try {
-              await chat.sendSeen();
-              console.log(`[WPP] Chat ${chat.id.user} marcado como visto`);
-            } catch (sendSeenError) {
-              console.warn(`[WPP] Não foi possível marcar chat ${chat.id.user} como visto:`, sendSeenError.message);
-              // Não falha - continua com outros chats
-            }
-
-            processed++;
-          } catch (fetchError) {
-            console.warn(`[WPP] Erro ao buscar mensagens do chat ${chat.id.user}:`, fetchError.message);
-            errors++;
-          }
-        }
-      } catch (chatError) {
-        console.warn(`[WPP] Erro ao processar chat:`, chatError.message);
-        errors++;
-        continue;
+        await chat.sendSeen();
+      } catch (err: any) {
+        logger.warn(
+          `Could not mark messages as read. Maybe whatsapp session disconnected? Err: ${
+            err?.message ?? err
+          }`
+        );
       }
     }
-
-    console.log(`[WPP] Sincronização completa: ${processed} chats processados, ${errors} erros`);
-    
-  } catch (error) {
-    console.error('[WPP] ERRO CRÍTICO em syncUnreadMessages:', error.message);
-    // NÃO propaga o erro - não queremos quebrar o WhatsApp por causa disso
   }
 };
 
@@ -84,34 +48,44 @@ export const initWbot = async (whatsapp: Whatsapp): Promise<Session> => {
     try {
       const io = getIO();
       const sessionName = whatsapp.name;
-      let sessionCfg;
+      let sessionCfg: any;
 
+      // OBS: em versões atuais do whatsapp-web.js, "session" + LocalAuth não é o caminho ideal.
+      // Mantive para não quebrar seu projeto, mas "LocalAuth" já gerencia persistência.
       if (whatsapp && whatsapp.session) {
-        sessionCfg = JSON.parse(whatsapp.session);
+        try {
+          sessionCfg = JSON.parse(whatsapp.session);
+        } catch (e) {
+          sessionCfg = undefined;
+        }
       }
 
-      const args: String = process.env.CHROME_ARGS || "";
+      const args: string = process.env.CHROME_ARGS || "";
 
       const wbot: Session = new Client({
+        // Mantém compatibilidade com seu projeto (mesmo usando LocalAuth).
+        // @ts-ignore
         session: sessionCfg,
         authStrategy: new LocalAuth({ clientId: "bd_" + whatsapp.id }),
+
         puppeteer: {
-          // Caminho do Chromium para Nixpacks
-          executablePath: process.env.CHROME_BIN || 
-                         process.env.CHROMIUM_PATH || 
-                         "/nix/var/nix/profiles/default/bin/chromium" || 
-                         undefined,
+          // Caminho do Chromium para ambientes Nixpacks/Coolify
+          executablePath:
+            process.env.CHROME_BIN ||
+            process.env.CHROMIUM_PATH ||
+            "/nix/var/nix/profiles/default/bin/chromium",
+
           // @ts-ignore
           browserWSEndpoint: process.env.CHROME_WS || undefined,
-          // Argumentos corrigidos para Nixpacks
+
           args: [
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage',
-            '--disable-accelerated-2d-canvas',
-            '--disable-gpu',
-            '--single-process',
-            ...(args ? args.split(" ") : []) // Mantém args existentes se houver
+            "--no-sandbox",
+            "--disable-setuid-sandbox",
+            "--disable-dev-shm-usage",
+            "--disable-accelerated-2d-canvas",
+            "--disable-gpu",
+            "--single-process",
+            ...(args ? args.split(" ") : [])
           ]
         }
       });
@@ -121,6 +95,7 @@ export const initWbot = async (whatsapp: Whatsapp): Promise<Session> => {
       wbot.on("qr", async qr => {
         logger.info("Session:", sessionName);
         qrCode.generate(qr, { small: true });
+
         await whatsapp.update({ qrcode: qr, status: "qrcode", retries: 0 });
 
         const sessionIndex = sessions.findIndex(s => s.id === whatsapp.id);
@@ -135,7 +110,7 @@ export const initWbot = async (whatsapp: Whatsapp): Promise<Session> => {
         });
       });
 
-      wbot.on("authenticated", async session => {
+      wbot.on("authenticated", async () => {
         logger.info(`Session: ${sessionName} AUTHENTICATED`);
       });
 
@@ -182,19 +157,22 @@ export const initWbot = async (whatsapp: Whatsapp): Promise<Session> => {
           sessions.push(wbot);
         }
 
-        wbot.sendPresenceAvailable();
-        
-        // Sincronização em segundo plano para não travar
-        setTimeout(() => {
-          syncUnreadMessages(wbot).catch(err => {
-            console.warn('[WPP] Erro não crítico na sincronização:', err.message);
-          });
-        }, 3000); // Espera 3 segundos após o ready
+        try {
+          // mantém o comportamento atual do seu projeto
+          // (não muda a lógica de presença)
+          // @ts-ignore
+          wbot.sendPresenceAvailable();
+        } catch (e) {
+          // não é crítico
+        }
+
+        await syncUnreadMessages(wbot);
 
         resolve(wbot);
       });
     } catch (err) {
       logger.error(err);
+      reject(err as any);
     }
   });
 };
@@ -205,6 +183,7 @@ export const getWbot = (whatsappId: number): Session => {
   if (sessionIndex === -1) {
     throw new AppError("ERR_WAPP_NOT_INITIALIZED");
   }
+
   return sessions[sessionIndex];
 };
 
