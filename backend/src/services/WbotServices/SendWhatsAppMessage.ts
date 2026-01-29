@@ -13,19 +13,20 @@ const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 const normalizeChatId = (number?: string | null): string => {
   if (!number) return "";
-
-  // deixa só dígitos (ex: +55 (11) 99999-9999 => 5511999999999)
   const digits = String(number).replace(/\D/g, "");
   if (!digits) return "";
-
   return `${digits}@c.us`;
 };
 
 const getQuotedMessageId = (quotedMsg?: any): string | undefined => {
-  // whatsapp-web.js geralmente usa quotedMsg.id._serialized
   const id = quotedMsg?.id?._serialized || quotedMsg?.id;
   if (!id) return undefined;
   return String(id);
+};
+
+const isMarkedUnreadBug = (err: any): boolean => {
+  const msg = String(err?.message || err || "");
+  return msg.includes("markedUnread") || msg.includes("Cannot read properties of undefined (reading 'markedUnread')");
 };
 
 const SendWhatsAppMessage = async ({
@@ -33,37 +34,45 @@ const SendWhatsAppMessage = async ({
   ticket,
   quotedMsg
 }: SendMessageParams): Promise<void> => {
+  const chatId = normalizeChatId(ticket?.contact?.number);
+
+  if (!chatId) {
+    logger.warn(`ERR_SENDING_WAPP_MSG | chatId inválido | ticketId=${ticket?.id}`);
+    throw new AppError("ERR_SENDING_WAPP_MSG", 400);
+  }
+
+  if (!body || !body.trim()) {
+    logger.warn(`ERR_SENDING_WAPP_MSG | mensagem vazia | chatId=${chatId} | ticketId=${ticket?.id}`);
+    throw new AppError("ERR_SENDING_WAPP_MSG", 400);
+  }
+
+  const quotedMessageId = getQuotedMessageId(quotedMsg);
+
   try {
     const wbot = getWbot(ticket.whatsappId);
 
-    const chatId = normalizeChatId(ticket?.contact?.number);
-
-    if (!chatId) {
-      logger.warn(
-        `ERR_SENDING_WAPP_MSG | chatId inválido | ticketId=${ticket?.id}`
-      );
-      throw new AppError("ERR_SENDING_WAPP_MSG", 400);
-    }
-
-    if (!body || !body.trim()) {
-      logger.warn(
-        `ERR_SENDING_WAPP_MSG | mensagem vazia | chatId=${chatId} | ticketId=${ticket?.id}`
-      );
-      throw new AppError("ERR_SENDING_WAPP_MSG", 400);
-    }
-
-    const quotedMessageId = getQuotedMessageId(quotedMsg);
-
     // Retry leve (reconexões do WhatsApp Web são comuns)
-    const maxRetries = 2;
+    const maxRetries = 3;
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        if (quotedMessageId) {
-          await wbot.sendMessage(chatId, body, { quotedMessageId });
-        } else {
-          await wbot.sendMessage(chatId, body);
+        // (Opcional) “aquecimento” do chat antes de enviar — ajuda a evitar objetos undefined em alguns casos
+        let chat: any = null;
+        try {
+          chat = await wbot.getChatById(chatId);
+        } catch {
+          // Se não conseguir obter chat, segue com wbot.sendMessage normalmente
         }
+
+        const options: any = {};
+        if (quotedMessageId) options.quotedMessageId = quotedMessageId;
+
+        if (chat?.sendMessage) {
+          await chat.sendMessage(body, options);
+        } else {
+          await wbot.sendMessage(chatId, body, options);
+        }
+
         return;
       } catch (err: any) {
         const msg = err?.message ?? err;
@@ -72,15 +81,25 @@ const SendWhatsAppMessage = async ({
           `SendWhatsAppMessage falhou ${attempt}/${maxRetries} | chatId=${chatId} | ticketId=${ticket?.id} | err=${msg}`
         );
 
-        if (attempt >= maxRetries) throw err;
+        // Erro específico do WhatsApp Web / whatsapp-web.js (markedUnread)
+        // Normalmente é intermitente; vale tentar novamente após pequeno delay.
+        if (isMarkedUnreadBug(err)) {
+          // aumenta um pouco o delay nas tentativas desse bug
+          await delay(1200);
+        } else {
+          await delay(800);
+        }
 
-        await delay(800);
+        if (attempt >= maxRetries) throw err;
       }
     }
   } catch (err: any) {
+    // NÃO perca o erro real no log (isso ajuda muito no debug)
     logger.warn({
       message: "ERR_SENDING_WAPP_MSG",
       statusCode: 400,
+      ticketId: ticket?.id,
+      chatId,
       error: err?.message ?? err
     });
 
