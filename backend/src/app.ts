@@ -19,7 +19,7 @@ const app = express();
 app.use(
   cors({
     credentials: true,
-    origin: 'https://sinssistemas.cloud'
+    origin: 'http://sinssistemas.cloud'
     // Ou para desenvolvimento, pode deixar mais aberto:
     // origin: ['http://tcckg88kco4c08c4kwk4ksss.76.13.70.6.sslip.io', 'http://localhost:3000']
   })
