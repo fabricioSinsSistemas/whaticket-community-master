@@ -12,60 +12,22 @@ interface Session extends Client {
 
 const sessions: Session[] = [];
 
-/**
- * Sincroniza mensagens não lidas (processa) sem tentar marcar como lidas.
- * Motivo: sendSeen/sendRead frequentemente quebra quando o WhatsApp Web muda
- * (ex.: erro "markedUnread" undefined) e isso gera WARN/instabilidade.
- */
 const syncUnreadMessages = async (wbot: Session) => {
-  let chats: any[] = [];
-
-  try {
-    chats = await wbot.getChats();
-  } catch (err: any) {
-    logger.warn(
-      `Could not fetch chats to sync unread messages. Err: ${err?.message ?? err}`
-    );
-    return;
-  }
+  const chats = await wbot.getChats();
 
   /* eslint-disable no-restricted-syntax */
   /* eslint-disable no-await-in-loop */
-
   for (const chat of chats) {
-    try {
-      if (!chat) continue;
-
-      const unreadCount = Number(chat.unreadCount ?? 0);
-      if (!unreadCount || unreadCount <= 0) continue;
-
-      let unreadMessages: any[] = [];
-      try {
-        unreadMessages = await chat.fetchMessages({ limit: unreadCount });
-      } catch (errFetch: any) {
-        logger.warn(
-          `Could not fetch unread messages for chat. Err: ${errFetch?.message ?? errFetch}`
-        );
-        continue;
-      }
+    if (chat.unreadCount > 0) {
+      const unreadMessages = await chat.fetchMessages({
+        limit: chat.unreadCount
+      });
 
       for (const msg of unreadMessages) {
-        try {
-          await handleMessage(msg, wbot);
-        } catch (errHandle: any) {
-          logger.warn(
-            `Error handling unread message (ignored). Err: ${errHandle?.message ?? errHandle}`
-          );
-        }
+        await handleMessage(msg, wbot);
       }
 
-      // IMPORTANTE:
-      // Não chamar chat.sendSeen() aqui para evitar o bug do WhatsApp Web
-      // (markedUnread undefined) que causa WARN e pode instabilizar a sessão.
-    } catch (errLoop: any) {
-      logger.warn(
-        `syncUnreadMessages loop error (ignored). Err: ${errLoop?.message ?? errLoop}`
-      );
+      await chat.sendSeen();
     }
   }
 };
@@ -75,44 +37,19 @@ export const initWbot = async (whatsapp: Whatsapp): Promise<Session> => {
     try {
       const io = getIO();
       const sessionName = whatsapp.name;
-      let sessionCfg: any;
+      let sessionCfg;
 
       if (whatsapp && whatsapp.session) {
-        try {
-          sessionCfg = JSON.parse(whatsapp.session);
-        } catch (e) {
-          sessionCfg = undefined;
-        }
+        sessionCfg = JSON.parse(whatsapp.session);
       }
-
-      const args: string = process.env.CHROME_ARGS || "";
-
-      const wbot: Session = new Client({
-        // Mantém compatibilidade com seu projeto (mesmo usando LocalAuth).
-        // @ts-ignore
+	  
+	  const wbot: Session = new Client({
         session: sessionCfg,
-        authStrategy: new LocalAuth({ clientId: "bd_" + whatsapp.id }),
-
-        puppeteer: {
-          executablePath:
-            process.env.CHROME_BIN ||
-            process.env.CHROMIUM_PATH ||
-            "/nix/var/nix/profiles/default/bin/chromium",
-
-          // @ts-ignore
-          browserWSEndpoint: process.env.CHROME_WS || undefined,
-
-          args: [
-            "--no-sandbox",
-            "--disable-setuid-sandbox",
-            "--disable-dev-shm-usage",
-            "--disable-accelerated-2d-canvas",
-            "--disable-gpu",
-            // dica: se ainda tiver desconexão, teste REMOVER o --single-process
-            "--single-process",
-            ...(args ? args.split(" ") : [])
-          ]
-        }
+        authStrategy: new LocalAuth({clientId: 'bd_'+whatsapp.id}),
+        puppeteer: { 
+        args: ['--no-sandbox', '--disable-setuid-sandbox'],
+          executablePath: process.env.CHROME_BIN || undefined
+      },
       });
 
       wbot.initialize();
@@ -120,7 +57,6 @@ export const initWbot = async (whatsapp: Whatsapp): Promise<Session> => {
       wbot.on("qr", async qr => {
         logger.info("Session:", sessionName);
         qrCode.generate(qr, { small: true });
-
         await whatsapp.update({ qrcode: qr, status: "qrcode", retries: 0 });
 
         const sessionIndex = sessions.findIndex(s => s.id === whatsapp.id);
@@ -135,8 +71,11 @@ export const initWbot = async (whatsapp: Whatsapp): Promise<Session> => {
         });
       });
 
-      wbot.on("authenticated", async () => {
+      wbot.on("authenticated", async session => {
         logger.info(`Session: ${sessionName} AUTHENTICATED`);
+//        await whatsapp.update({
+//          session: JSON.stringify(session)
+//        });
       });
 
       wbot.on("auth_failure", async msg => {
@@ -162,11 +101,6 @@ export const initWbot = async (whatsapp: Whatsapp): Promise<Session> => {
         reject(new Error("Error starting whatsapp session."));
       });
 
-      // Alguns forks/logs usam disconnected, outros usam change_state
-      wbot.on("disconnected", (reason: any) => {
-        logger.info(`Session: ${sessionName} DISCONNECTED. Reason: ${reason}`);
-      });
-
       wbot.on("ready", async () => {
         logger.info(`Session: ${sessionName} READY`);
 
@@ -187,20 +121,13 @@ export const initWbot = async (whatsapp: Whatsapp): Promise<Session> => {
           sessions.push(wbot);
         }
 
-        try {
-          // @ts-ignore
-          wbot.sendPresenceAvailable();
-        } catch (e) {
-          // não crítico
-        }
-
+        wbot.sendPresenceAvailable();
         await syncUnreadMessages(wbot);
 
         resolve(wbot);
       });
     } catch (err) {
       logger.error(err);
-      reject(err as any);
     }
   });
 };
@@ -211,7 +138,6 @@ export const getWbot = (whatsappId: number): Session => {
   if (sessionIndex === -1) {
     throw new AppError("ERR_WAPP_NOT_INITIALIZED");
   }
-
   return sessions[sessionIndex];
 };
 
