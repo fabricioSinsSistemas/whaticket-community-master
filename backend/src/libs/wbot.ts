@@ -6,6 +6,14 @@ import AppError from "../errors/AppError";
 import { logger } from "../utils/logger";
 import { handleMessage } from "../services/WbotServices/wbotMessageListener";
 
+/****FÉ ***/
+import { Client, LocalAuth } from "whatsapp-web.js";
+
+const wbot: Session = new Client({
+        authStrategy: new LocalAuth({
+          clientId: sessionName,
+        }),
+
 interface Session extends Client {
   id?: number;
 }
