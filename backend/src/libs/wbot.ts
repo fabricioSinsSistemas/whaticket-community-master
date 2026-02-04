@@ -6,6 +6,9 @@ import AppError from "../errors/AppError";
 import { logger } from "../utils/logger";
 import { handleMessage } from "../services/WbotServices/wbotMessageListener";
 
+interface Session extends Client {
+  id?: number;
+}
 
 const sessions: Session[] = [];
 
