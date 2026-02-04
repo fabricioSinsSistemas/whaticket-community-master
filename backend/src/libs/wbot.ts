@@ -7,14 +7,14 @@ import { logger } from "../utils/logger";
 import { handleMessage } from "../services/WbotServices/wbotMessageListener";
 
 
-const sessions: Session[] = [];
+const sessions: Client[] = [];
 
 /**
  * Sincroniza mensagens não lidas (processa) sem tentar marcar como lidas.
  * Motivo: sendSeen/sendRead frequentemente quebra quando o WhatsApp Web muda
  * (ex.: erro "markedUnread" undefined) e isso gera WARN/instabilidade.
  */
-const syncUnreadMessages = async (wbot: Session) => {
+const syncUnreadMessages = async (wbot: Client) => {
   let chats: any[] = [];
 
   try {
@@ -67,7 +67,9 @@ const syncUnreadMessages = async (wbot: Session) => {
   }
 };
 
-export const initWbot = async (whatsapp: Whatsapp): Promise<Session> => {
+
+
+export const initWbot = async (whatsapp: Whatsapp): Promise<Client> => {
   return new Promise((resolve, reject) => {
     try {
       const io = getIO();
@@ -84,7 +86,7 @@ export const initWbot = async (whatsapp: Whatsapp): Promise<Session> => {
 
       const args: string = process.env.CHROME_ARGS || "";
 
-      const wbot: Session = new Client({
+      const wbot: Client = new Client({
         // Mantém compatibilidade com seu projeto (mesmo usando LocalAuth).
         // @ts-ignore
         session: sessionCfg,
@@ -202,7 +204,7 @@ export const initWbot = async (whatsapp: Whatsapp): Promise<Session> => {
   });
 };
 
-export const getWbot = (whatsappId: number): Session => {
+export const getWbot = (whatsappId: number): Client => {
   const sessionIndex = sessions.findIndex(s => s.id === whatsappId);
 
   if (sessionIndex === -1) {
