@@ -6,16 +6,6 @@ import AppError from "../errors/AppError";
 import { logger } from "../utils/logger";
 import { handleMessage } from "../services/WbotServices/wbotMessageListener";
 
-/****FÉ ***/
-const wbot: Session = new Client({
-  authStrategy: new NoAuth(),
-  session: sessionCfg,
-  puppeteer: {
-    executablePath: process.env.CHROME_BIN 
-      || undefined, // @ts-ignore browserWSEndpoint: process.env.CHROME_WS || undefined,
-    args: args.split(' ')
-  }
-});
 
 const sessions: Session[] = [];
 
