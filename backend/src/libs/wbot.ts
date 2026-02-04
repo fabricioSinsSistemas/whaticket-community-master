@@ -7,16 +7,15 @@ import { logger } from "../utils/logger";
 import { handleMessage } from "../services/WbotServices/wbotMessageListener";
 
 /****FÉ ***/
-import { Client, LocalAuth } from "whatsapp-web.js";
-
 const wbot: Session = new Client({
-        authStrategy: new LocalAuth({
-          clientId: sessionName,
-        }),
-
-interface Session extends Client {
-  id?: number;
-}
+  authStrategy: new NoAuth(),
+  session: sessionCfg,
+  puppeteer: {
+    executablePath: process.env.CHROME_BIN 
+      || undefined, // @ts-ignore browserWSEndpoint: process.env.CHROME_WS || undefined,
+    args: args.split(' ')
+  }
+});
 
 const sessions: Session[] = [];
 
