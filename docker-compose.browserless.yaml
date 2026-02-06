@@ -1,17 +1,31 @@
-version: '3'
+version: "3.8"
 
 networks:
   whaticket:
 
 services:
-
   backend:
     environment:
       - CHROME_WS=ws://chrome:3000
+    depends_on:
+      chrome:
+        condition: service_healthy
+    networks:
+      - whaticket
 
   chrome:
     image: browserless/chrome:latest
+    shm_size: "1gb"
+    restart: unless-stopped
     environment:
       - MAX_CONCURRENT_SESSIONS=${MAX_CONCURRENT_SESSIONS:-1}
+      # opcional (se quiser travar o chrome “mais leve”):
+      # - MAX_QUEUE_LENGTH=5
+      # - CONNECTION_TIMEOUT=600000
     networks:
       - whaticket
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
